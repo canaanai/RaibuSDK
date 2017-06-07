@@ -3,6 +3,7 @@ package com.easy.raibu;
 import android.media.AudioFormat;
 import android.util.Log;
 
+import com.easy.raibu.ui.KLiveView;
 import com.laifeng.sopcastsdk.camera.CameraHolder;
 import com.laifeng.sopcastsdk.camera.CameraListener;
 import com.laifeng.sopcastsdk.configuration.AudioConfiguration;
@@ -15,7 +16,6 @@ import com.laifeng.sopcastsdk.ui.CameraLivingView;
 import com.laifeng.sopcastsdk.utils.SopCastLog;
 import com.laifeng.sopcastsdk.video.effect.Effect;
 import com.laifeng.sopcastsdk.video.effect.NullEffect;
-import com.easy.raibu.ui.KLiveView;
 
 /**
  * @author chenp
@@ -33,6 +33,7 @@ public class LiveEngine {
     private LiveConnectionListener connectionListener;
     private LiveCameraListener cameraListener;
     private boolean startAfterCameraOpened = false;
+    private CameraConfiguration.Builder cameraBuilder;
 
     private LiveEngine(CameraLivingView livingView){
         this.livingView = livingView;
@@ -56,7 +57,6 @@ public class LiveEngine {
     public void start(){
 
         if (CameraHolder.instance().getState() == CameraHolder.State.PREVIEW){
-            livingView.start();
             mRtmpSender.connect();
         }else {
             startAfterCameraOpened = true;
@@ -173,13 +173,14 @@ public class LiveEngine {
         });
     }
 
-    private void initCamera(CameraConfiguration configuration){
+    private void initCamera(CameraConfiguration.Builder builder){
         /*CameraConfiguration.Builder cameraBuilder = new CameraConfiguration.Builder();
         cameraBuilder.setOrientation(CameraConfiguration.Orientation.PORTRAIT)
                 .setFacing(CameraConfiguration.Facing.BACK)
                 .setFocusMode(CameraConfiguration.FocusMode.TOUCH);
         cameraConfiguration = cameraBuilder.build();*/
-        livingView.setCameraConfiguration(configuration);
+        cameraBuilder = builder;
+        livingView.setCameraConfiguration(builder.build());
     }
 
     private void initVideo(VideoConfiguration configuration){
@@ -226,6 +227,16 @@ public class LiveEngine {
         mRtmpSender.setSenderListener(new SenderListener());
         livingView.setSender(mRtmpSender);
     }
+
+    /*public void setOrientation(Orientation orientation){
+        CameraConfiguration.Orientation co = (orientation == Orientation.PORTRAIT)
+                ? CameraConfiguration.Orientation.PORTRAIT
+                : CameraConfiguration.Orientation.LANDSCAPE;
+
+        cameraBuilder = cameraBuilder.setOrientation(co);
+
+        livingView.setCameraConfiguration(cameraBuilder.build());
+    }*/
 
     /*public static class Builder{
         CameraConfiguration.Builder cameraBuilder = new CameraConfiguration.Builder();
@@ -415,6 +426,7 @@ public class LiveEngine {
         LiveConnectionListener connectionListener;
         LiveCameraListener cameraListener;
         boolean logEnable = false;
+        boolean isOutVideoSizeLocked = false;
 
         /**
          *
@@ -613,6 +625,12 @@ public class LiveEngine {
             
             return this;
         }
+
+        public Builder isVideoSizeLocked(boolean isLocked){
+            this.isOutVideoSizeLocked = isLocked;
+
+            return this;
+        }
         
         public LiveEngine builder(){
             CameraConfiguration.Orientation co = (orientation == Orientation.PORTRAIT)
@@ -625,18 +643,29 @@ public class LiveEngine {
                     ? AudioFormat.ENCODING_PCM_16BIT
                     : AudioFormat.ENCODING_PCM_8BIT;
             int frequency = (audioFrequency == AudioFrequency.FREQUENCY_16000HZ) ? 8000 : 16000;
+            int mOutputWidth;
+            int mOutputHeight;
+
+            if (!isOutVideoSizeLocked && orientation == Orientation.LANDSCAPE){
+                mOutputWidth = outputHeight;
+                mOutputHeight = outputWidth;
+            }else {
+                mOutputWidth = outputWidth;
+                mOutputHeight = outputHeight;
+            }
+
             LiveEngine component = new LiveEngine(livingView);
 
-            CameraConfiguration cameraConfiguration = new CameraConfiguration.Builder()
+            CameraConfiguration.Builder cameraBuilder = new CameraConfiguration.Builder()
+                    .setPreview(previewHeight, previewWidth)
                     .setFps(previewFps)
                     .setFacing(facing)
-                    .setOrientation(co)
-                    .build();
+                    .setOrientation(co);
             VideoConfiguration videoConfiguration = new VideoConfiguration.Builder()
                     .setBps(minVideoBps, maxVideoBps)
                     .setFps(outFps)
                     .setIfi(iFrameInterval)
-                    .setSize(outputWidth, outputHeight)
+                    .setSize(mOutputWidth, mOutputHeight)
                     .build();
             AudioConfiguration audioConfiguration = new AudioConfiguration.Builder()
                     .setAec(ace)
@@ -645,11 +674,11 @@ public class LiveEngine {
                     .build();
 
             component.initLiveView(logEnable);
-            component.initCamera(cameraConfiguration);
+            component.initCamera(cameraBuilder);
             component.initVideo(videoConfiguration);
             component.initAudio(audioConfiguration);
             component.initPacker(audioConfiguration);
-            component.initSender(serverUrl, outputWidth, outputHeight, audioConfiguration);
+            component.initSender(serverUrl, mOutputWidth, mOutputHeight, audioConfiguration);
             component.setEffect(effect);
             component.setLiveCameraListener(cameraListener);
             component.setLiveConnectionListener(connectionListener);
@@ -694,12 +723,16 @@ public class LiveEngine {
 
             if (connectionListener != null)
                 connectionListener.onConnected();
+
+            livingView.start();
         }
 
         @Override
         public void onDisConnected() {
             if (connectionListener != null)
                 connectionListener.onDisConnected();
+
+            livingView.stop();
         }
 
         @Override

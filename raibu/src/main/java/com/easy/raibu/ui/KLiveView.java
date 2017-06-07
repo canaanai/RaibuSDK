@@ -10,7 +10,7 @@ import com.laifeng.sopcastsdk.ui.CameraLivingView;
  * @version 2017-04-25 13:47
  */
 
-public class KLiveView extends CameraLivingView{
+public class KLiveView extends CameraLivingView {
     public KLiveView(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
